@@ -1,24 +1,96 @@
-## 说明
+## 从零手写 Qwen 系列模型
 
-本仓库从零手写了 Qwen2 系列模型，模型的架构基于 Qwen 及相关的技术进行。
+本项目从零手写了 Qwen2 系列模型，模型的架构基于 Qwen2（transformer) 架构及相关技术进行。
 
-本项目从零手写了 Qwen2.0-xxB-Instruction 模型的所有细节，包含 embedding, rope, attention（GQA）, ffn, rms_norm, linear, softmax 以及后处理等，并在实现细节的基础上，搭建了 AI 大模型的对话框架，借助模型的预训练权重，实现了手写大模型的完整功能：**手写完后的模型可运行、可与之对话**。
+本项目从零手写了 Qwen2-xxB-Instruction 模型的所有细节，包含:
 
-本仓库保留了大模型技术最核心的代码，无用或冗余的代码已经删除，这样使得整体代码逻辑更加清晰，方便大家进行大模型技术的学习。
+- Embedding (嵌入层)
+- Rope (旋转位置编码)
+- Attention（GQA, 分组查询注意力机制)
+- FFN (前馈神经网络)
+- RmsNorm (归一化层)
+- Linear（线性层）
+- Softmax （分类器）
+- post or generation process （后处理生成）
 
-因为 Qwen2 系列架构相同，因此本仓库手写完 Qwen 架构后，你可以完整的运行 **Qwen2-0.5、1.5B、7B、72B** 等模型，并可以与手写的模型进行对话，同时还提供了 CPU 版本与 GPU 版本，见 src 目录。
+并在实现以上细节的基础上，搭建了**对话型**的 AI 大模型框架，借助 Qwen2 系列模型的预训练权重，实现了从零手写大模型的完整功能：
 
-本仓库不对 Qwen2 的细节 or 技术作过多介绍，如果你希望系统的学习 AI 大模型尤其是 Qwen 大模型的实现技术细节，可以订阅我的 AI 大模型技术专栏，也可找我进行一对一教学。
+那就是 —— **手写的模型可在 CPU/GPU 上运行、并且可完整的完成对话功能**。
 
-## 订阅技术专栏
+### 本项目支持的模型列表
+
+- Qwen2-0.5B-Instruction
+- Qwen2-1.5B-Instruction
+- Qwen2-7B-Instruction
+- Qwen2-72B-Instruction
+
+更多模型及 Qwen3 or MOE 模型正在支持中，欢迎关注。
+
+## 仓库说明
+
+本项目的代码仓库仅保留了运行 Qwen 模型最核心的代码，无用或冗余的代码已经删除，这样使得模型的代码逻辑更加清晰，方便大家进行大模型技术的学习。
+
+因为 Qwen 系列模型使用的架构或者说技术完全相同，因此本项目在从零手写完一个系列（如 Qwen2 系列）后，可以无缝、完整的运行 **Qwen2-0.5、1.5B、7B、72B** 等模型，并可以与手写的模型进行对话，同时仓库中还提供了 CPU 版本与 GPU 版本。
+
+### 仓库目录结构
+
+- models: 利用 transformers 库运行 Qwen 模型的示例代码
+- src：手写的 Qwen 系列模型的源代码目录（包含多个版本） 
+- scripts：用来维护仓库的一些脚本（无需关注）
+- requirements.txt：项目的依赖库
+- env.py：用来配置本仓库所需环境的脚本
+
+### 如何配置环境
+
+**下载仓库**
+```bash
+git clone git@github.com:dongdongcan/write_qwen_from_scratch.git
+```
+
+**环境配置**
+
+Linux 环境下，在仓库根目录下执行：
+
+```bash
+python3 env.py
+```
+按照输出提示，进入虚拟环境，提示类似于：
+
+```shell
+Use the following cmd to enter virtual environment
+>>> source /home/dongdongcan/write_qwen_from_scratch/.venv/bin/activate
+```
+
+**进入虚拟环境**
+
+执行输出的提示命令，进入虚拟环境
+
+```bash
+source /home/dongdongcan/write_qwen_from_scratch/.venv/bin/activate
+```
+
+**安装依赖**
+
+在虚拟环境下，执行：
+
+```bash
+python3 env.py --install
+```
+完成本项目所需的所有依赖库的安装后，即可运行 Qwen 模型。
+
+---
+
+本仓库不对 Qwen2 的技术细节作过多介绍，如果你希望系统的学习 AI 大模型尤其是 Qwen 系列大模型的技术细节，欢迎订阅我的 AI 大模型技术专栏，同时我也提供一对一的学习辅导服务，欢迎来撩（联系我）。
+
+### 在这里订阅技术专栏
 
 - [Transformer 通关秘籍](https://www.yuque.com/yuqueyonghupftxbc/ai100/wvyi8axax45piuxq)
 
 - [从零手写大模型实战](https://www.yuque.com/yuqueyonghupftxbc/ai100/lc1bna1l1dl2zp39)
 
-## 联系我
+### 撩一撩（联系我）
 
-- 微信号：ddcsggcs (加微信备注：github)
+- 微信号：ddcsggcs (加微信备注：大模型)
 
 - 微信公众号：[见这里](https://mp.weixin.qq.com/s/lKwSvfpMt7iNqa83_HlQug)
 
