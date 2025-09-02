@@ -214,14 +214,14 @@ class Qwen:
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_id)
 
         key_states, value_states = kv_cache.update(key_states, value_states, layer_idx)
-        key_states = torch.repeat_interleave(key_states, repeats=groups, dim=1)
-        value_states = torch.repeat_interleave(value_states, repeats=groups, dim=1)
+        key_states = torch.repeat_interleave(key_states, repeats=self.groups, dim=1)
+        value_states = torch.repeat_interleave(value_states, repeats=self.groups, dim=1)
         is_causal = seq_length > 1
         attention_out = torch.nn.functional.scaled_dot_product_attention(
             query_states, key_states, value_states, is_causal=is_causal
         )
         attention_out = attention_out.transpose(1, 2)
-        attention_out = attention_out.reshape(1, seq_length, hidden_size)
+        attention_out = attention_out.reshape(1, seq_length, self.config.hidden_size)
         attn_out = torch.nn.functional.linear(attention_out, self.model.model.layers[layer_idx].self_attn.o_proj.weight)
 
         return attn_out, kv_cache
@@ -235,12 +235,12 @@ class Qwen:
 
     def decoder_layer(self, states, layer_idx, position_id, past_key_value):
         residual = states
-        out = self.rms_norm(states, self.model.model.layers[layer_idx].input_layernorm.weight, rms_norm_eps)
+        out = self.rms_norm(states, self.model.model.layers[layer_idx].input_layernorm.weight, self.config.rms_norm_eps)
         out, present_key_value = self.gqa(layer_idx, out, past_key_value, position_id)
         out = out + residual
 
         residual = out
-        out = self.rms_norm(out, self.model.model.layers[layer_idx].post_attention_layernorm.weight, rms_norm_eps)
+        out = self.rms_norm(out, self.model.model.layers[layer_idx].post_attention_layernorm.weight, self.config.rms_norm_eps)
         out = self.mlp(layer_idx, out)
         out = out + residual
         return out, present_key_value
@@ -250,7 +250,7 @@ class Qwen:
             states, present_key_value = self.decoder_layer(states, layer_idx, position_id, past_key_value)
 
         past_key_value = present_key_value
-        states = self.rms_norm(states, self.model.model.norm.weight, rms_norm_eps)
+        states = self.rms_norm(states, self.model.model.norm.weight, self.config.rms_norm_eps)
         return states, past_key_value
 
     def lm_head(self, states):
@@ -262,15 +262,15 @@ class Qwen:
         eos_token_id = self.generation_config.eos_token_id
         return token_id in eos_token_id
 
-    def generate(self, usr_input):
-        prompt = self.apply_chat_template(usr_input)
+    def generate(self, user_input):
+        prompt = self.apply_chat_template(user_input)
         past_key_value = KVCache()
         # 初始化输入的 token ID 和位置 ID
         input_ids = None
         position_id = None
 
         answers = ""
-        print(f"\n\nUser Input: {user_prompt}\n")
+        print(f"\n\nUser Input: {user_input}\n")
 
         for _ in range(self.max_new_tokens):
             prompt_ids, embeddings = self.embedding(prompt)
@@ -319,10 +319,10 @@ class Qwen:
 
 
 def main():
-    user_prompt = "一个星期有几天?"
+    user_input = "一个星期有几天?"
     model_name = get_model_name()
     model = Qwen(model_name)
-    response = model.generate(user_prompt)
+    response = model.generate(user_input)
     print(f"{response}")
 
 
