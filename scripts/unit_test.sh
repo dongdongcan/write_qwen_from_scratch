@@ -39,5 +39,5 @@ for F in "${FILES[@]}"; do
         echo "File $FILE does not exist."
     fi
     
-    echo "-----------------------------\n"
+    echo "-----------------------------"
 done

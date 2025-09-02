@@ -16,10 +16,11 @@ import argparse
 
 SUPPORT_MODELS = {"Qwen2-0.5B-Instruct", "Qwen2-1.5B-Instruct", "Qwen2-7B-Instruct", "Qwen2-72B-Instruct"}
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, help="model name", default="Qwen2-0.5B-Instruct")
-    parser.add_argument("--verbose", "-V", action='store_true', help="show debug info", default=False)
+    parser.add_argument("--verbose", "-V", action="store_true", help="show debug info", default=False)
     parser.add_argument("--max_new_tokens", type=int, help="max supported generation token numbers", default=20)
     args = parser.parse_args()
     return args
