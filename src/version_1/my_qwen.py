@@ -27,11 +27,16 @@ SUPPORT_MODELS = {
     "Qwen2-72B-Instruct",
 }
 
+
 def get_model_name():
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, help="model name", default="Qwen2-0.5B-Instruct")
     args = parser.parse_args()
+
+    if not args.model:
+        args.model = SUPPORT_MODELS[0]
 
     if args.model not in SUPPORT_MODELS:
         print(f"model `{args.model}` not supported")
@@ -40,6 +45,7 @@ def get_model_name():
     else:
         print(f"Runing {args.model}...")
         return f"Qwen/{args.model}"
+
 
 # ------------------------------- Part1 -------------------------------------
 # 获取模型的模型结构、tokenizer 和 config 参数，供其他 Part 的函数使用

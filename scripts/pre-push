@@ -1,0 +1,38 @@
+#!/bin/bash
+
+ROOT_PATH=$(git rev-parse --show-toplevel)
+
+############## format code
+echo -e "\033[32mStart of code-format...\033[0m"
+MODIFIED_FILES=$(git show --name-only --pretty=format: | grep -v '^$' | sort -u)
+EXIT_CODE=0
+while IFS= read -r file; do
+    if [ -e "$file" ]; then
+        "${ROOT_PATH}/scripts/format_code.py" --file "$file"
+        if [ $? -ne 0 ]; then
+            echo "Error happens when format code for $file."
+            EXIT_CODE=1
+        fi
+    else
+        echo "File $file not exist, skip..."
+    fi
+done <<< "$MODIFIED_FILES"
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "Error happens when format code."
+    exit 1
+fi
+echo -e "\033[32mEnd of code-format...\033[0m"
+
+############################
+echo -e "\033[32mStart of unit-test...\033[0m"
+bash "${ROOT_PATH}"/scripts/unit_test.sh
+if [ $? -ne 0 ];then
+    echo "Error happens when execute unit test."
+    exit 1
+fi
+echo -e "\033[32mEnd of unit-test...\033[0m"
+
+############################
+echo "Done of pre-push check, start to push code to origin..."
+exit 0
