@@ -38,7 +38,7 @@ def generate_rope_matrix(hidden_size, max_position_embeddings):
 
     # 计算 `10000^(2i/hidden_size)`，这是位置编码公式中的一部分
     # 使用 10000 作为基数，是为了让不同维度有不同的频率
-    seq_list = 10000**seq_list
+    seq_list = 10000 ** seq_list
 
     # 计算 `1/(10000^(2i/hidden_size))`，即旋转角度 θ 序列
     # θ 是用于计算 sin/cos 的角度参数，定义了位置编码的频率

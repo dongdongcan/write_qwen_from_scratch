@@ -13,19 +13,10 @@ import torch
 from torch import nn
 import math
 from typing import List
-from transformers.models.qwen2 import (
-    Qwen2TokenizerFast,
-    Qwen2ForCausalLM,
-    Qwen2Config,
-)
+from transformers.models.qwen2 import Qwen2TokenizerFast, Qwen2ForCausalLM, Qwen2Config
 from transformers import GenerationConfig
 
-SUPPORT_MODELS = {
-    "Qwen2-0.5B-Instruct",
-    "Qwen2-1.5B-Instruct",
-    "Qwen2-7B-Instruct",
-    "Qwen2-72B-Instruct",
-}
+SUPPORT_MODELS = {"Qwen2-0.5B-Instruct", "Qwen2-1.5B-Instruct", "Qwen2-7B-Instruct", "Qwen2-72B-Instruct"}
 
 
 def get_model_name():
@@ -200,7 +191,7 @@ def generate_rope_matrix(hidden_size, max_position_embeddings):
 
     # 计算 `10000^(2i/dim)`，这是位置编码公式中的一部分
     # 使用 10000 作为基数，是为了让不同维度有不同的频率
-    seq_list = 10000**seq_list
+    seq_list = 10000 ** seq_list
 
     # 计算 `1/(10000^(2i/dim))`，即旋转角度 θ 序列
     # θ 是用于计算 sin/cos 的角度参数，定义了位置编码的频率
@@ -465,8 +456,7 @@ def my_mlp(layer_idx, hidden_state: torch.tensor):
     up_proj = torch.nn.functional.linear(hidden_state, model.model.layers[layer_idx].mlp.up_proj.weight)
     # 使用 SiLU 激活函数，并进行逐元素相乘，再通过 down_proj 权重矩阵进行线性变换
     down_proj = torch.nn.functional.linear(
-        torch.functional.F.silu(gate_proj) * up_proj,
-        model.model.layers[layer_idx].mlp.down_proj.weight,
+        torch.functional.F.silu(gate_proj) * up_proj, model.model.layers[layer_idx].mlp.down_proj.weight
     )
     return down_proj
 

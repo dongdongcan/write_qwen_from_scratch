@@ -2,11 +2,7 @@
 # This code is licensed under the Apache License.
 # See the LICENSE file for details.
 
-from transformers.models.qwen2 import (
-    Qwen2TokenizerFast,
-    Qwen2ForCausalLM,
-    Qwen2Config,
-)
+from transformers.models.qwen2 import Qwen2TokenizerFast, Qwen2ForCausalLM, Qwen2Config
 
 # 获取模型的模型结构、tokenizer 和 config 参数，供其他 Part 的函数使用
 

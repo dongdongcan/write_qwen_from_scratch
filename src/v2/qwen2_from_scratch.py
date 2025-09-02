@@ -2,9 +2,6 @@
 # This code is licensed under the Apache License.
 # See the LICENSE file for details.
 
-# !pip3 install huggingface_hub
-# !pip3 install transformers -U
-
 import os, sys
 import numpy as np
 import random
@@ -15,24 +12,17 @@ import math
 from typing import List
 from transformers.models.qwen2 import Qwen2TokenizerFast, Qwen2ForCausalLM, Qwen2Config
 from transformers import GenerationConfig
+import argparse
 
 SUPPORT_MODELS = {"Qwen2-0.5B-Instruct", "Qwen2-1.5B-Instruct", "Qwen2-7B-Instruct", "Qwen2-72B-Instruct"}
 
-
-def get_model_name():
-    import argparse
-
+def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, help="model name", default="Qwen2-0.5B-Instruct")
+    parser.add_argument("--verbose", "-V", action='store_true', help="show debug info", default=False)
+    parser.add_argument("--max_new_tokens", type=int, help="max supported generation token numbers", default=20)
     args = parser.parse_args()
-
-    if args.model not in SUPPORT_MODELS:
-        print(f"model `{args.model}` not supported")
-        print(f"Supported models: {', '.join(SUPPORT_MODELS)}")
-        sys.exit(1)
-    else:
-        print(f"Runing {args.model}...")
-        return f"Qwen/{args.model}"
+    return args
 
 
 class PostProcess:
@@ -105,10 +95,12 @@ class KVCache:
         return self.KCache[layer_idx].shape[-2]
 
     def print(self, layer_idx):
+        if not self.verbose:
+            return
         if len(self.KCache) == 0:
-            print("缓存为空")
+            print("Cache is empty")
         else:
-            print(f"层 {layer_idx} 缓存的 token 数：", self.KCache[layer_idx].shape[-2])
+            print(f"layer {layer_idx} cached token number：", self.KCache[layer_idx].shape[-2])
 
 
 def generate_rope_matrix(hidden_size, max_position_embeddings):
@@ -139,7 +131,11 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
 
 
 class Qwen:
-    def __init__(self, model_name, max_new_tokens=20):
+    def __init__(self, args):
+        model_name = "Qwen/" + args.model
+        print(f"Runing {model_name}")
+        self.verbose = args.verbose
+        self.max_new_tokens = args.max_new_tokens
         self.model = Qwen2ForCausalLM.from_pretrained(model_name, torch_dtype="auto")
         self.tokenizer = Qwen2TokenizerFast.from_pretrained(model_name)
         self.config = Qwen2Config.from_pretrained(model_name)
@@ -147,9 +143,7 @@ class Qwen:
         self.groups = (int)(self.config.num_attention_heads / self.config.num_key_value_heads)
 
         self.generation_config = GenerationConfig.from_pretrained(model_name)
-        self.max_new_tokens = max_new_tokens
         self.post = PostProcess(self.generation_config)
-        self.kv_cache = KVCache()
         self.sin_matrix, self.cos_matrix = generate_rope_matrix(
             self.feature_per_head, self.config.max_position_embeddings
         )
@@ -228,7 +222,6 @@ class Qwen:
 
     def rms_norm(self, states, weights, eps):
         states = states.to(torch.float32)
-
         variance = states.pow(2).mean(-1, keepdim=True)
         states = states * torch.rsqrt(variance + eps)
         return weights * states.to(weights.dtype)
@@ -240,7 +233,9 @@ class Qwen:
         out = out + residual
 
         residual = out
-        out = self.rms_norm(out, self.model.model.layers[layer_idx].post_attention_layernorm.weight, self.config.rms_norm_eps)
+        out = self.rms_norm(
+            out, self.model.model.layers[layer_idx].post_attention_layernorm.weight, self.config.rms_norm_eps
+        )
         out = self.mlp(layer_idx, out)
         out = out + residual
         return out, present_key_value
@@ -265,6 +260,7 @@ class Qwen:
     def generate(self, user_input):
         prompt = self.apply_chat_template(user_input)
         past_key_value = KVCache()
+
         # 初始化输入的 token ID 和位置 ID
         input_ids = None
         position_id = None
@@ -312,18 +308,27 @@ class Qwen:
             # 累积生成的答案
             answers += next_token
 
-            # 打印生成的 token ID 和对应的文本 token
-            print(f"predict next token id: {next_token_id}, next word: {next_token}")
+            if self.verbose:
+                # 打印生成的 token ID 和对应的文本 token
+                print(f"predict next token id: {next_token_id}, next word: {next_token}")
 
         return answers
 
 
 def main():
+    args = parse_args()
+
+    if args.model not in SUPPORT_MODELS:
+        print(f"model `{args.model}` not supported")
+        print(f"Supported models: {', '.join(SUPPORT_MODELS)}")
+        sys.exit(1)
+
     user_input = "一个星期有几天?"
-    model_name = get_model_name()
-    model = Qwen(model_name)
+
+    model = Qwen(args)
     response = model.generate(user_input)
-    print(f"{response}")
+    print(f"user input: {user_input}")
+    print(f"Answer: {response}")
 
 
 if __name__ == "__main__":
