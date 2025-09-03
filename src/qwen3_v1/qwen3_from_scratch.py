@@ -5,16 +5,16 @@
 import sys
 import torch
 from typing import List
-from transformers.models.qwen2 import Qwen2TokenizerFast, Qwen2ForCausalLM, Qwen2Config
+from transformers.models.qwen3 import Qwen3TokenizerFast, Qwen3ForCausalLM, Qwen3Config
 from transformers import GenerationConfig
 import argparse
 
-SUPPORT_MODELS = {"Qwen2-0.5B-Instruct", "Qwen2-1.5B-Instruct", "Qwen2-7B-Instruct", "Qwen2-72B-Instruct"}
+SUPPORT_MODELS = {"Qwen3-0.6B"}
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, help="model name", default="Qwen2-0.5B-Instruct")
+    parser.add_argument("--model", type=str, help="model name", default="Qwen3-0.6B")
     parser.add_argument("--verbose", "-V", action="store_true", help="show debug info", default=False)
     parser.add_argument("--max_new_tokens", type=int, help="max supported generation token numbers", default=30)
     args = parser.parse_args()
@@ -156,7 +156,7 @@ class Qwen2:
     def __init__(self, model_name, max_new_tokens, verbose=False):
         self.verbose = verbose
         self.max_new_tokens = max_new_tokens
-        self.model = Qwen2ForCausalLM.from_pretrained(model_name, dtype="auto")
+        self.model = Qwen2ForCausalLM.from_pretrained(model_name, torch_dtype="auto")
         self.tokenizer = Qwen2TokenizerFast.from_pretrained(model_name)
         self.config = Qwen2Config.from_pretrained(model_name)
         self.feature_per_head = (int)(self.config.hidden_size / self.config.num_attention_heads)

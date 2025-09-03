@@ -25,8 +25,15 @@ fi
 echo -e "\033[32mEnd of code-format...\033[0m"
 
 ############################
+missing_files=$(git status --porcelain)
+if [ -n "$missing_files" ]; then
+    echo "Error: There are untracked or modified files that haven't been added."
+    exit 1
+fi
+
+############################
 echo -e "\033[32mStart of unit-test...\033[0m"
-bash "${ROOT_PATH}"/scripts/unit_test.sh
+"${ROOT_PATH}"/scripts/test.py
 if [ $? -ne 0 ];then
     echo "Error happens when execute unit test."
     exit 1
