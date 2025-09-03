@@ -2,13 +2,8 @@
 # This code is licensed under the Apache License.
 # See the LICENSE file for details.
 
-import os, sys
-import numpy as np
-import random
-import transformers
+import sys
 import torch
-from torch import nn
-import math
 from typing import List
 from transformers.models.qwen2 import Qwen2TokenizerFast, Qwen2ForCausalLM, Qwen2Config
 from transformers import GenerationConfig
@@ -26,47 +21,55 @@ def parse_args():
     return args
 
 
-class PostProcess:
-    def __init__(self, config) -> None:
-        self.config = config
+class Qwen2Generation:
+    def __init__(self, generation_config) -> None:
+        self.generation_config = generation_config
 
-    def topk_logits_warper(self, input_ids, logits):
+    def is_token_eos(self, token_id):
+        eos_token_id = self.generation_config.eos_token_id
+        return token_id in eos_token_id
+
+    def topk_logits_warper(self, logits):
         filter_value = -float("Inf")
-        top_k_temp = min(self.config.top_k, logits.size(-1))
+        top_k_temp = min(self.generation_config.top_k, logits.size(-1))
 
         indices_to_remove = logits < torch.topk(logits, top_k_temp)[0][..., -1, None]
         logits_processed = logits.masked_fill(indices_to_remove, filter_value)
         return logits_processed
 
-    def topp_logits_warper(self, input_ids, logits):
+    def topp_logits_warper(self, logits):
         min_tokens_to_keep = 1
         filter_value = -float("Inf")
 
         sorted_logits, sorted_indices = torch.sort(logits, descending=False)
         cumulative_probs = sorted_logits.softmax(dim=-1).cumsum(dim=-1)
 
-        sorted_indices_to_remove = cumulative_probs <= (1 - self.config.top_p)
+        sorted_indices_to_remove = cumulative_probs <= (1 - self.generation_config.top_p)
         sorted_indices_to_remove[..., -min_tokens_to_keep:] = 0
 
         indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
         logits_processed = logits.masked_fill(indices_to_remove, filter_value)
         return logits_processed
 
-    def temperature_logits_warper(self, input_ids, logits):
-        logits_processed = logits / self.config.temperature
+    def temperature_logits_warper(self, logits):
+        logits_processed = logits / self.generation_config.temperature
         return logits_processed
 
     def repetition_penalty_logits_processor(self, input_ids, logits):
         score = torch.gather(logits, 1, input_ids)
-        score = torch.where(score < 0, score * self.config.repetition_penalty, score / self.config.repetition_penalty)
+        score = torch.where(
+            score < 0,
+            score * self.generation_config.repetition_penalty,
+            score / self.generation_config.repetition_penalty,
+        )
         logits_processed = logits.scatter(1, input_ids, score)
         return logits_processed
 
     def logits_wrap_process(self, input_ids, logits):
         logits_processed = self.repetition_penalty_logits_processor(input_ids, logits)
-        logits_processed = self.temperature_logits_warper(input_ids, logits_processed)
-        logits_processed = self.topk_logits_warper(input_ids, logits_processed)
-        logits_processed = self.topp_logits_warper(input_ids, logits_processed)
+        logits_processed = self.temperature_logits_warper(logits_processed)
+        logits_processed = self.topk_logits_warper(logits_processed)
+        logits_processed = self.topp_logits_warper(logits_processed)
         return logits_processed
 
     def predict_next_token(self, logits, input_ids):
@@ -90,7 +93,7 @@ class KVCache:
             self.VCache[layer_idx] = torch.cat([self.VCache[layer_idx], new_value_states], dim=-2)
         return self.KCache[layer_idx], self.VCache[layer_idx]
 
-    def get_seq_length(self, layer_idx) -> int:
+    def get_cached_length(self, layer_idx) -> int:
         if len(self.KCache) <= layer_idx:
             return 0
         return self.KCache[layer_idx].shape[-2]
@@ -104,50 +107,51 @@ class KVCache:
             print(f"layer {layer_idx} cached token number：", self.KCache[layer_idx].shape[-2])
 
 
-def generate_rope_matrix(hidden_size, max_position_embeddings):
-    seq_list = torch.arange(0, hidden_size, 2, dtype=torch.int64).float()
-    seq_list = seq_list / hidden_size
-    seq_list = 10000 ** seq_list
-    theta = 1.0 / seq_list
-    t = torch.arange(max_position_embeddings, dtype=torch.int64).type_as(theta)
-    freqs = torch.outer(t, theta)
-    emb = torch.cat((freqs, freqs), dim=-1)
-    cos_val = emb.cos().to(torch.bfloat16)
-    sin_val = emb.sin().to(torch.bfloat16)
-    return sin_val, cos_val
+class Rope:
+    def __init__(self, hidden_size, max_position_embeddings):
+        self.hidden_size = hidden_size
+        self.max_position_embeddings = max_position_embeddings
+        self.sin_matrix, self.cos_matrix = self.matrix
 
+    @property
+    def matrix(self):
+        seq_list = torch.arange(0, self.hidden_size, 2, dtype=torch.int64).float()
+        seq_list = seq_list / self.hidden_size
+        seq_list = 10000**seq_list
+        theta = 1.0 / seq_list
+        t = torch.arange(self.max_position_embeddings, dtype=torch.int64).type_as(theta)
+        freqs = torch.outer(t, theta)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos_val = emb.cos().to(torch.bfloat16)
+        sin_val = emb.sin().to(torch.bfloat16)
+        return sin_val, cos_val
 
-def rotate_half(x):
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
+    def rotate_half(self, x):
+        x1 = x[..., : x.shape[-1] // 2]
+        x2 = x[..., x.shape[-1] // 2 :]
+        return torch.cat((-x2, x1), dim=-1)
 
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
-    cos = cos[position_ids]
-    sin = sin[position_ids]
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+    def apply_rotary_pos_emb(self, q, k, cos, sin, position_ids):
+        cos = cos[position_ids]
+        sin = sin[position_ids]
+        q_embed = (q * cos) + (self.rotate_half(q) * sin)
+        k_embed = (k * cos) + (self.rotate_half(k) * sin)
+        return q_embed, k_embed
 
 
 class Qwen:
-    def __init__(self, args):
-        model_name = "Qwen/" + args.model
-        print(f"Runing {model_name}")
-        self.verbose = args.verbose
-        self.max_new_tokens = args.max_new_tokens
+    def __init__(self, model_name, max_new_tokens, verbose=False):
+        self.verbose = verbose
+        self.max_new_tokens = max_new_tokens
         self.model = Qwen2ForCausalLM.from_pretrained(model_name, torch_dtype="auto")
         self.tokenizer = Qwen2TokenizerFast.from_pretrained(model_name)
         self.config = Qwen2Config.from_pretrained(model_name)
         self.feature_per_head = (int)(self.config.hidden_size / self.config.num_attention_heads)
         self.groups = (int)(self.config.num_attention_heads / self.config.num_key_value_heads)
 
-        self.generation_config = GenerationConfig.from_pretrained(model_name)
-        self.post = PostProcess(self.generation_config)
-        self.sin_matrix, self.cos_matrix = generate_rope_matrix(
-            self.feature_per_head, self.config.max_position_embeddings
-        )
+        generation_config = GenerationConfig.from_pretrained(model_name)
+        self.generation = Qwen2Generation(generation_config)
+        self.rope = Rope(self.feature_per_head, self.config.max_position_embeddings)
 
     def apply_chat_template(self, prompt):
         prompt_encoding = self.tokenizer.encode(prompt)
@@ -159,8 +163,8 @@ class Qwen:
 
         return self.tokenizer.decode(template)
 
-    def embedding(self, prompt):
-        input_ids = self.tokenizer.encode(prompt)
+    def embedding(self, input: str):
+        input_ids = self.tokenizer.encode(input)
         input_ids = torch.tensor(input_ids)
         input_ids = input_ids[None, :]
         word_embeddings = torch.nn.functional.embedding(input_ids, self.model.model.embed_tokens.weight)
@@ -174,22 +178,22 @@ class Qwen:
         )
         return down_proj
 
-    def gqa(self, layer_idx, hidden_states, kv_cache, position_id):
-        seq_length = hidden_states.size()[-2]
+    def gqa(self, layer_idx, states, kv_cache, position_id):
+        seq_length = states.size()[-2]
         query_states = torch.nn.functional.linear(
-            hidden_states,
+            states,
             self.model.model.layers[layer_idx].self_attn.q_proj.weight,
             self.model.model.layers[layer_idx].self_attn.q_proj.bias,
         )
 
         key_states = torch.nn.functional.linear(
-            hidden_states,
+            states,
             self.model.model.layers[layer_idx].self_attn.k_proj.weight,
             self.model.model.layers[layer_idx].self_attn.k_proj.bias,
         )
 
         value_states = torch.nn.functional.linear(
-            hidden_states,
+            states,
             self.model.model.layers[layer_idx].self_attn.v_proj.weight,
             self.model.model.layers[layer_idx].self_attn.v_proj.bias,
         )
@@ -203,10 +207,10 @@ class Qwen:
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        kv_seq_len = seq_length + kv_cache.get_seq_length(layer_idx)
-        cos = self.cos_matrix[:kv_seq_len]
-        sin = self.sin_matrix[:kv_seq_len]
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_id)
+        kv_cached_seq_len = seq_length + kv_cache.get_cached_length(layer_idx)
+        cos = self.rope.cos_matrix[:kv_cached_seq_len]
+        sin = self.rope.sin_matrix[:kv_cached_seq_len]
+        query_states, key_states = self.rope.apply_rotary_pos_emb(query_states, key_states, cos, sin, position_id)
 
         key_states, value_states = kv_cache.update(key_states, value_states, layer_idx)
         key_states = torch.repeat_interleave(key_states, repeats=self.groups, dim=1)
@@ -254,15 +258,10 @@ class Qwen:
         logits = logits[None, :]
         return logits
 
-    def is_token_eos(self, token_id):
-        eos_token_id = self.generation_config.eos_token_id
-        return token_id in eos_token_id
-
     def generate(self, user_input):
         prompt = self.apply_chat_template(user_input)
         past_key_value = KVCache()
 
-        # 初始化输入的 token ID 和位置 ID
         input_ids = None
         position_id = None
 
@@ -271,62 +270,46 @@ class Qwen:
 
         for _ in range(self.max_new_tokens):
             prompt_ids, embeddings = self.embedding(prompt)
-
-            # 如果 input_ids 尚未初始化，则将其设置为 prompt_ids
             input_ids = prompt_ids if input_ids is None else input_ids
 
-            # 初始化 position_id，表示 token 的位置
             if position_id is None:
                 text_len = prompt_ids.size()[-1]
                 position_id = torch.arange(text_len).reshape(1, text_len)
             else:
-                # 更新 position_id，表示生成的下一个 token 的位置
                 position_id = torch.tensor([[text_len]])
                 text_len += 1
 
-            # 调用模型的解码器模块，生成隐藏状态
             states, past_key_value = self.forward(embeddings, past_key_value, position_id)
-
-            # 使用 lm_head 将隐藏状态映射为 logits
             logits = self.lm_head(states)
-
-            # 根据 logits 预测下一个 token 的 ID
-            next_token_id = self.post.predict_next_token(logits, input_ids)
-
-            # 将预测的 token ID 解码为实际的文本 token
+            next_token_id = self.generation.predict_next_token(logits, input_ids)
             next_token = self.tokenizer.decode(next_token_id)
-
-            # 更新 input_ids，追加生成的下一个 token
             input_ids = torch.cat([input_ids, next_token_id[:, None]], dim=-1)
 
-            # 更新 prompt，将生成的下一个 token 作为新的输入
             prompt = next_token
 
-            # 检查是否生成了结束符号（EOS token），如果是，则结束生成
-            if self.is_token_eos(next_token_id):
+            if self.generation.is_token_eos(next_token_id):
                 break
 
-            # 累积生成的答案
             answers += next_token
 
             if self.verbose:
-                # 打印生成的 token ID 和对应的文本 token
-                print(f"predict next token id: {next_token_id}, next word: {next_token}")
+                print(f"next word:{next_token}({next_token_id})")
 
         return answers
 
 
 def main():
     args = parse_args()
-
     if args.model not in SUPPORT_MODELS:
         print(f"model `{args.model}` not supported")
         print(f"Supported models: {', '.join(SUPPORT_MODELS)}")
         sys.exit(1)
+    else:
+        model_name = "Qwen/" + args.model
+        print(f"Runing {model_name}")
 
     user_input = "一个星期有几天?"
-
-    model = Qwen(args)
+    model = Qwen(model_name, args.max_new_tokens, args.verbose)
     response = model.generate(user_input)
     print(f"user input: {user_input}")
     print(f"Answer: {response}")
