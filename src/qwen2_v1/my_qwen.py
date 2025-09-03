@@ -26,6 +26,9 @@ def get_model_name():
     parser.add_argument("--model", type=str, help="model name", default="Qwen2-0.5B-Instruct")
     args = parser.parse_args()
 
+    if not args.model:
+        args.model = SUPPORT_MODELS[0]
+
     if args.model not in SUPPORT_MODELS:
         print(f"model `{args.model}` not supported")
         print(f"Supported models: {', '.join(SUPPORT_MODELS)}")
@@ -35,9 +38,6 @@ def get_model_name():
         return f"Qwen/{args.model}"
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"使用设备: {device}")
-
 # ------------------------------- Part1 -------------------------------------
 # 获取模型的模型结构、tokenizer 和 config 参数，供其他 Part 的函数使用
 
@@ -45,7 +45,7 @@ print(f"使用设备: {device}")
 model_name = get_model_name()
 
 # 从预训练模型中加载模型结构
-model = Qwen2ForCausalLM.from_pretrained(model_name, torch_dtype="auto").to(device)
+model = Qwen2ForCausalLM.from_pretrained(model_name, torch_dtype="auto")
 
 # 从预训练模型中加载与文本生成相关的配置
 generation_config = GenerationConfig.from_pretrained(model_name)
@@ -145,7 +145,7 @@ def my_word_embedding_process(prompt):
     input_ids = tokenizer.encode(prompt)
 
     # 将 token ID 列表转换为 PyTorch 的张量（tensor），形状为 [seq_length]
-    input_ids = torch.tensor(input_ids).to(device)
+    input_ids = torch.tensor(input_ids)
 
     # 增加一个 batch 维度，使输入张量的形状变为 [1, seq_length]，以适应模型的输入格式
     input_ids = input_ids[None, :]
@@ -183,7 +183,7 @@ def generate_rope_matrix(hidden_size, max_position_embeddings):
 
     # 生成 [0, 2, 4, ..., hidden_size-2] 的序列，表示嵌入向量的偶数维度
     # 这些偶数维度将用于构造 sin/cos 位置编码
-    seq_list = torch.arange(0, hidden_size, 2, dtype=torch.int64).float().to(device)
+    seq_list = torch.arange(0, hidden_size, 2, dtype=torch.int64).float()
 
     # 计算 `2i / hidden_size`，其中 i 为偶数维度索引
     # 该操作决定了不同维度上的位置编码频率（频率与维度有关）
@@ -191,7 +191,7 @@ def generate_rope_matrix(hidden_size, max_position_embeddings):
 
     # 计算 `10000^(2i/dim)`，这是位置编码公式中的一部分
     # 使用 10000 作为基数，是为了让不同维度有不同的频率
-    seq_list = 10000 ** seq_list
+    seq_list = 10000**seq_list
 
     # 计算 `1/(10000^(2i/dim))`，即旋转角度 θ 序列
     # θ 是用于计算 sin/cos 的角度参数，定义了位置编码的频率
@@ -199,7 +199,7 @@ def generate_rope_matrix(hidden_size, max_position_embeddings):
 
     # 生成位置序列 [0, 1, 2, 3, ..., max_position_embeddings - 1]
     # 这个序列代表了每个位置的索引，用于位置编码
-    t = torch.arange(max_position_embeddings, dtype=torch.int64).type_as(theta).to(device)
+    t = torch.arange(max_position_embeddings, dtype=torch.int64).type_as(theta)
 
     # 计算位置序列与旋转角度序列的外积，得到一个位置-频率矩阵
     # freqs 矩阵的每一行对应一个位置，每一列对应一个频率
@@ -741,10 +741,10 @@ for _ in range(max_new_tokens):
     # 初始化 position_id，表示 token 的位置
     if position_id is None:
         text_len = prompt_ids.size()[-1]
-        position_id = torch.arange(text_len).reshape(1, text_len).to(device)
+        position_id = torch.arange(text_len).reshape(1, text_len)
     else:
         # 更新 position_id，表示生成的下一个 token 的位置
-        position_id = torch.tensor([[text_len]]).to(device)
+        position_id = torch.tensor([[text_len]])
         text_len += 1
 
     # 调用模型的解码器模块，生成隐藏状态
