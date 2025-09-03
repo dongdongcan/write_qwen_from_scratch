@@ -16,7 +16,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, help="model name", default="Qwen2-0.5B-Instruct")
     parser.add_argument("--verbose", "-V", action="store_true", help="show debug info", default=False)
-    parser.add_argument("--max_new_tokens", type=int, help="max supported generation token numbers", default=20)
+    parser.add_argument("--max_new_tokens", type=int, help="max supported generation token numbers", default=30)
     args = parser.parse_args()
     return args
 
@@ -83,6 +83,10 @@ class KVCache:
     def __init__(self) -> None:
         self.KCache: List[torch.tensor] = []
         self.VCache: List[torch.tensor] = []
+
+    def clear(self):
+        self.KCache = []
+        self.VCache = []
 
     def update(self, new_key_states, new_value_states, layer_idx):
         if len(self.KCache) <= layer_idx:
@@ -152,6 +156,7 @@ class Qwen:
         generation_config = GenerationConfig.from_pretrained(model_name)
         self.generation = Qwen2Generation(generation_config)
         self.rope = Rope(self.feature_per_head, self.config.max_position_embeddings)
+        self.kv_cache = KVCache()
 
     def apply_chat_template(self, prompt):
         prompt_encoding = self.tokenizer.encode(prompt)
@@ -178,7 +183,7 @@ class Qwen:
         )
         return down_proj
 
-    def gqa(self, layer_idx, states, kv_cache, position_id):
+    def gqa(self, layer_idx, states, position_id):
         seq_length = states.size()[-2]
         query_states = torch.nn.functional.linear(
             states,
@@ -207,12 +212,12 @@ class Qwen:
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        kv_cached_seq_len = seq_length + kv_cache.get_cached_length(layer_idx)
+        kv_cached_seq_len = seq_length + self.kv_cache.get_cached_length(layer_idx)
         cos = self.rope.cos_matrix[:kv_cached_seq_len]
         sin = self.rope.sin_matrix[:kv_cached_seq_len]
         query_states, key_states = self.rope.apply_rotary_pos_emb(query_states, key_states, cos, sin, position_id)
 
-        key_states, value_states = kv_cache.update(key_states, value_states, layer_idx)
+        key_states, value_states = self.kv_cache.update(key_states, value_states, layer_idx)
         key_states = torch.repeat_interleave(key_states, repeats=self.groups, dim=1)
         value_states = torch.repeat_interleave(value_states, repeats=self.groups, dim=1)
         is_causal = seq_length > 1
@@ -223,7 +228,7 @@ class Qwen:
         attention_out = attention_out.reshape(1, seq_length, self.config.hidden_size)
         attn_out = torch.nn.functional.linear(attention_out, self.model.model.layers[layer_idx].self_attn.o_proj.weight)
 
-        return attn_out, kv_cache
+        return attn_out
 
     def rms_norm(self, states, weights, eps):
         states = states.to(torch.float32)
@@ -231,10 +236,10 @@ class Qwen:
         states = states * torch.rsqrt(variance + eps)
         return weights * states.to(weights.dtype)
 
-    def decoder_layer(self, states, layer_idx, position_id, past_key_value):
+    def decoder_layer(self, states, layer_idx, position_id):
         residual = states
         out = self.rms_norm(states, self.model.model.layers[layer_idx].input_layernorm.weight, self.config.rms_norm_eps)
-        out, present_key_value = self.gqa(layer_idx, out, past_key_value, position_id)
+        out = self.gqa(layer_idx, out, position_id)
         out = out + residual
 
         residual = out
@@ -243,15 +248,14 @@ class Qwen:
         )
         out = self.mlp(layer_idx, out)
         out = out + residual
-        return out, present_key_value
+        return out
 
-    def forward(self, states, past_key_value, position_id):
+    def forward(self, states, position_id):
         for layer_idx in range(self.config.num_hidden_layers):
-            states, present_key_value = self.decoder_layer(states, layer_idx, position_id, past_key_value)
+            states = self.decoder_layer(states, layer_idx, position_id)
 
-        past_key_value = present_key_value
         states = self.rms_norm(states, self.model.model.norm.weight, self.config.rms_norm_eps)
-        return states, past_key_value
+        return states
 
     def lm_head(self, states):
         logits = torch.nn.functional.linear(states[-1, -1, :], self.model.lm_head.weight)
@@ -260,7 +264,7 @@ class Qwen:
 
     def generate(self, user_input):
         prompt = self.apply_chat_template(user_input)
-        past_key_value = KVCache()
+        self.kv_cache.clear()
 
         input_ids = None
         position_id = None
@@ -279,7 +283,7 @@ class Qwen:
                 position_id = torch.tensor([[text_len]])
                 text_len += 1
 
-            states, past_key_value = self.forward(embeddings, past_key_value, position_id)
+            states = self.forward(embeddings, position_id)
             logits = self.lm_head(states)
             next_token_id = self.generation.predict_next_token(logits, input_ids)
             next_token = self.tokenizer.decode(next_token_id)
@@ -308,11 +312,18 @@ def main():
         model_name = "Qwen/" + args.model
         print(f"Runing {model_name}")
 
-    user_input = "一个星期有几天?"
     model = Qwen(model_name, args.max_new_tokens, args.verbose)
-    response = model.generate(user_input)
-    print(f"user input: {user_input}")
-    print(f"Answer: {response}")
+
+    questions = [
+        "一个星期有几天?",
+        "中国的首都是哪里?",
+        "孙悟空是谁?",
+    ]
+
+    for question in questions:
+        print(f"\nQuestion: {question}")
+        response = model.generate(question)
+        print(f"Answer: {response}\n")
 
 
 if __name__ == "__main__":
