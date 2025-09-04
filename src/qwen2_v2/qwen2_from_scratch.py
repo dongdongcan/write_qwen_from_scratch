@@ -8,17 +8,9 @@ from typing import List
 from transformers.models.qwen2 import Qwen2TokenizerFast, Qwen2ForCausalLM, Qwen2Config
 from transformers import GenerationConfig
 import argparse
+from tools.args import parse_args
 
 SUPPORT_MODELS = {"Qwen2-0.5B-Instruct", "Qwen2-1.5B-Instruct", "Qwen2-7B-Instruct", "Qwen2-72B-Instruct"}
-
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, help="model name", default="Qwen2-0.5B-Instruct")
-    parser.add_argument("--verbose", "-V", action="store_true", help="show debug info", default=False)
-    parser.add_argument("--max_new_tokens", type=int, help="max supported generation token numbers", default=30)
-    args = parser.parse_args()
-    return args
 
 
 class Qwen2Generation:

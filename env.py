@@ -66,13 +66,15 @@ def install_hooks(args):
 
 def create_venv_and_enter(args):
     env_path = os.path.join(args.root_path, args.env_name)
-    if not os.path.exists(env_path):
+    if not os.path.exists(env_path) or args.rerun:
         cmd = ["python3", "-m", "venv", args.env_name]
         run_shell_cmd(cmd, args.root_path)
         # add some environment to .venv/bin/activate
         activate_file = os.path.join(env_path, "bin", "activate")
         hugging_face_end_point = "export HF_ENDPOINT=https://hf-mirror.com"
         append_line_to_file(activate_file, hugging_face_end_point)
+        python_path = "export PYTHONPATH=$PYTHONPATH:" + args.root_path
+        append_line_to_file(activate_file, python_path)
     else:
         print(f"{env_path} exist!")
 
@@ -84,6 +86,7 @@ def create_venv_and_enter(args):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--install", action="store_true", help="install all needed package")
+    parser.add_argument("--rerun", action="store_true", help="force rerun setting env infos")
 
     args = parser.parse_args()
     args.env_name = ".venv"

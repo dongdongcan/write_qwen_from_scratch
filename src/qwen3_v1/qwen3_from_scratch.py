@@ -5,20 +5,13 @@
 import sys
 import torch
 from typing import List
-from transformers.models.qwen3 import Qwen3TokenizerFast, Qwen3ForCausalLM, Qwen3Config
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
+
+# from transformers.models.qwen3 import Qwen3TokenizerFast, Qwen3ForCausalLM, Qwen3Config
 from transformers import GenerationConfig
-import argparse
+from tools.args import parse_args
 
 SUPPORT_MODELS = {"Qwen3-0.6B"}
-
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, help="model name", default="Qwen3-0.6B")
-    parser.add_argument("--verbose", "-V", action="store_true", help="show debug info", default=False)
-    parser.add_argument("--max_new_tokens", type=int, help="max supported generation token numbers", default=30)
-    args = parser.parse_args()
-    return args
 
 
 class Qwen2Generation:
@@ -152,13 +145,14 @@ class RmsNorm:
         return weights * states.to(weights.dtype)
 
 
-class Qwen2:
+class Qwen3:
     def __init__(self, model_name, max_new_tokens, verbose=False):
         self.verbose = verbose
         self.max_new_tokens = max_new_tokens
-        self.model = Qwen2ForCausalLM.from_pretrained(model_name, torch_dtype="auto")
-        self.tokenizer = Qwen2TokenizerFast.from_pretrained(model_name)
-        self.config = Qwen2Config.from_pretrained(model_name)
+
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto")
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.config = AutoConfig.from_pretrained(model_name)
         self.feature_per_head = (int)(self.config.hidden_size / self.config.num_attention_heads)
         self.groups = (int)(self.config.num_attention_heads / self.config.num_key_value_heads)
 
@@ -168,15 +162,11 @@ class Qwen2:
         self.kv_cache = KVCache()
         self.activation = RmsNorm(self.config.rms_norm_eps)
 
-    def apply_chat_template(self, prompt):
-        prompt_encoding = self.tokenizer.encode(prompt)
-        template = (
-            [151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198]
-            + prompt_encoding
-            + [151645, 198, 151644, 77091, 198]
-        )
-
-        return self.tokenizer.decode(template)
+    def apply_chat_template(self, prompt, enable_thinking=True):
+        text = "<|im_start|>user\n" + prompt + "<|im_end|>\n<|im_start|>assistant\n"
+        if not enable_thinking:
+            text = text + "<think>\n" + "\n" + "</think>\n"
+        return text
 
     def embedding(self, input: str):
         input_ids = self.tokenizer.encode(input)
@@ -311,7 +301,7 @@ def main():
         model_name = "Qwen/" + args.model
         print(f"Runing {model_name}")
 
-    model = Qwen2(model_name, args.max_new_tokens, args.verbose)
+    model = Qwen3(model_name, args.max_new_tokens, args.verbose)
 
     questions = [
         "一个星期有几天?",
