@@ -35,6 +35,11 @@ def config_pip(args):
     run_shell_cmd(config_cmd, args.root_path)
 
 
+def config_git(args):
+    cmd = ["git", "config", "--global", "core.editor", "vim"]
+    run_shell_cmd(cmd, args.root_path)
+
+
 def update_package(args):
     install_hugging_face_cmd = ["pip3", "install", "-U", "huggingface_hub"]
     run_shell_cmd(install_hugging_face_cmd, args.root_path)
@@ -105,6 +110,7 @@ def main():
     create_venv_and_enter(args)
 
     if args.install:
+        config_git(args)
         config_pip(args)
         update_package(args)
 

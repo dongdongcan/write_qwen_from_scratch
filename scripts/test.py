@@ -22,8 +22,8 @@ files = [
     "src/qwen2_v1/part5/my_decoder_module.py",
     "src/qwen2_v1/part6/my_post_process.py",
     "src/qwen2_v1/part7/build_my_llm.py",
-    "src/qwen2_v1/my_qwen.py",
-    "src/qwen2_v2/qwen2_from_scratch.py",
+    "src/qwen2_v1/my_qwen2_cpu.py",
+    "src/qwen2_v2/my_qwen2_cpu.py",
     "models/qwen2/qwen2_0.5B.py",
 ]
 
