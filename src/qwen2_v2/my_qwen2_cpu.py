@@ -294,7 +294,7 @@ class Qwen2:
 
 
 def main():
-    args = parse_args()
+    args = parse_args(model_required=True)
     if args.model not in SUPPORT_MODELS:
         print(f"model `{args.model}` not supported")
         print(f"Supported models: {', '.join(SUPPORT_MODELS)}")

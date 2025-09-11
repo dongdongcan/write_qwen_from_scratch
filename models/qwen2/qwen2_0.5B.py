@@ -8,6 +8,8 @@ from tools.args import parse_args
 
 def main(args):
     model_name = "Qwen/Qwen2-0.5B-Instruct"
+    if args.model:
+        assert args.model == model_name, f"only support {model_name} now"
 
     model = AutoModelForCausalLM.from_pretrained(model_name)
 
@@ -38,5 +40,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    args = parse_args(model_required=False)
     main(args)
