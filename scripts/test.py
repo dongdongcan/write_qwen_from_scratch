@@ -13,22 +13,22 @@ cases = {
     "src/qwen2_v1/part1/my_chat_template.py": None,
     "src/qwen2_v1/part1/my_word_embed.py": None,
     "src/qwen2_v1/part2/sdpa.py": None,
-    # "src/qwen2_v1/part2/mha.py": None,
-    # "src/qwen2_v1/part2/gqa.py": None,
-    # "src/qwen2_v1/part3/my_pos_embed.py": None,
-    # "src/qwen2_v1/part4/my_kvcache.py": None,
-    # "src/qwen2_v1/part4/gqa_with_rope.py": None,
-    # "src/qwen2_v1/part4/gqa_with_rope_kvcache.py": None,
-    # "src/qwen2_v1/part4/my_gqa.py": None,
-    # "src/qwen2_v1/part5/my_decoder_module.py": None,
-    # "src/qwen2_v1/part6/my_post_process.py": None,
-    # "src/qwen2_v1/part7/build_my_llm.py": None,
+    "src/qwen2_v1/part2/mha.py": None,
+    "src/qwen2_v1/part2/gqa.py": None,
+    "src/qwen2_v1/part3/my_pos_embed.py": None,
+    "src/qwen2_v1/part4/my_kvcache.py": None,
+    "src/qwen2_v1/part4/gqa_with_rope.py": None,
+    "src/qwen2_v1/part4/gqa_with_rope_kvcache.py": None,
+    "src/qwen2_v1/part4/my_gqa.py": None,
+    "src/qwen2_v1/part5/my_decoder_module.py": None,
+    "src/qwen2_v1/part6/my_post_process.py": None,
+    "src/qwen2_v1/part7/build_my_llm.py": None,
     "src/qwen2_v1/my_qwen2_cpu.py": None,
     "src/qwen2_v2/my_qwen2_cpu.py": {
         "model": "Qwen2-0.5B-Instruct",
         "to_console": True,
     },
-    "models/qwen2/qwen2_0.5B.py": None,
+    "models/qwen2/qwen2_0.5B.py": {"to_console": True},
 }
 
 
@@ -45,7 +45,6 @@ for file, params in cases.items():
         if "to_console" in params:
             to_console = params["to_console"]
 
-    # Check if the file exists
     if os.path.isfile(file_path):
         print(f"Cmd: {cmd}")
         try:
@@ -55,7 +54,6 @@ for file, params in cases.items():
             if to_console:
                 print(result.stdout.strip())
 
-            # Check the return code to determine success or failure
             if result.returncode == 0:
                 print(f"{file_path} executed successfully.")
             else:
@@ -72,4 +70,4 @@ for file, params in cases.items():
         print(f"File {file_path} does not exist.")
         sys.exit(1)
 
-    print("-----------------------------")
+    print("-" * 50)
