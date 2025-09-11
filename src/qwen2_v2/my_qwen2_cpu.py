@@ -7,7 +7,7 @@ import torch
 from typing import List
 from transformers.models.qwen2 import Qwen2TokenizerFast, Qwen2ForCausalLM, Qwen2Config
 from transformers import GenerationConfig
-import argparse
+from tools.model_info import get_mode_cached_dir
 from tools.args import parse_args
 
 SUPPORT_MODELS = {"Qwen2-0.5B-Instruct", "Qwen2-1.5B-Instruct", "Qwen2-7B-Instruct", "Qwen2-72B-Instruct"}
@@ -145,17 +145,26 @@ class RmsNorm:
 
 
 class Qwen2:
-    def __init__(self, model_name, max_new_tokens, verbose=False):
+    def __init__(self, model_name, max_new_tokens, verbose=False, local_files_only=True):
         self.verbose = verbose
         self.max_new_tokens = max_new_tokens
-        self.model = Qwen2ForCausalLM.from_pretrained(model_name, dtype="auto")
-        self.tokenizer = Qwen2TokenizerFast.from_pretrained(model_name)
-        self.config = Qwen2Config.from_pretrained(model_name)
+        if local_files_only:
+            cache_dir = get_mode_cached_dir(model_name)
+            print(f"Use cached model from {cache_dir}")
+            self.model = Qwen2ForCausalLM.from_pretrained(cache_dir, dtype="auto", local_files_only=True)
+            self.tokenizer = Qwen2TokenizerFast.from_pretrained(cache_dir, local_files_only=True)
+            self.config = Qwen2Config.from_pretrained(cache_dir, local_files_only=True)
+            generation_config = GenerationConfig.from_pretrained(cache_dir, local_files_only=True)
+            self.generation = Qwen2Generation(generation_config)
+        else:
+            self.model = Qwen2ForCausalLM.from_pretrained(model_name, dtype="auto")
+            self.tokenizer = Qwen2TokenizerFast.from_pretrained(model_name)
+            self.config = Qwen2Config.from_pretrained(model_name)
+            generation_config = GenerationConfig.from_pretrained(model_name)
+            self.generation = Qwen2Generation(generation_config)
+
         self.feature_per_head = (int)(self.config.hidden_size / self.config.num_attention_heads)
         self.groups = (int)(self.config.num_attention_heads / self.config.num_key_value_heads)
-
-        generation_config = GenerationConfig.from_pretrained(model_name)
-        self.generation = Qwen2Generation(generation_config)
         self.rope = Rope(self.feature_per_head, self.config.max_position_embeddings)
         self.kv_cache = KVCache()
         self.activation = RmsNorm(self.config.rms_norm_eps)

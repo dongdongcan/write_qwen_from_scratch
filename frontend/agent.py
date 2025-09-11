@@ -1,14 +1,11 @@
-from src.qwen2_v2 import my_qwen2
+from src.qwen2_v2 import my_qwen2_cpu as my_qwen2
 import gradio as gr
-import os
 
-dropdown_options = [
-    "Qwen2-0.5B-instruct",
-    "Qwen2-1.5B-Instruct",
-]
+dropdown_options = my_qwen2.SUPPORT_MODELS
 
 
 def generate_response(model_name, user_input):
+    model_name = "Qwen/" + model_name
     model = my_qwen2.Qwen2(model_name, max_new_tokens=100)
     response = model.generate(user_input)
     return response
