@@ -301,6 +301,8 @@ def main():
         model_name = "Qwen/" + args.model
         print(f"Runing {model_name}")
 
+    assert False, "The model are not publicly available yet."
+
     model = Qwen3(model_name, args.max_new_tokens, args.verbose)
 
     questions = [
