@@ -10,7 +10,7 @@ from transformers import GenerationConfig
 from tools.model_info import get_mode_cached_dir
 from tools.args import parse_args
 
-SUPPORT_MODELS = {"Qwen2-0.5B-Instruct", "Qwen2-1.5B-Instruct", "Qwen2-7B-Instruct", "Qwen2-72B-Instruct"}
+SUPPORT_MODELS = ["Qwen2-0.5B-Instruct", "Qwen2-1.5B-Instruct", "Qwen2-7B-Instruct", "Qwen2-72B-Instruct"]
 
 
 class Qwen2Generation:
@@ -145,23 +145,45 @@ class RmsNorm:
 
 
 class Qwen2:
-    def __init__(self, model_name, max_new_tokens, verbose=False, local_files_only=True):
+    def __init__(self, model_name, max_new_tokens, verbose=False):
         self.verbose = verbose
         self.max_new_tokens = max_new_tokens
-        if local_files_only:
-            cache_dir = get_mode_cached_dir(model_name)
+
+        self.model_class = Qwen2ForCausalLM
+        self.tokenizer_class = Qwen2TokenizerFast
+        self.config_class = Qwen2Config
+        self.generation_class = Qwen2Generation
+        self.generation_config_class = GenerationConfig
+        self.model = None
+        self.tokenizer = None
+        self.config = None
+        self.generation = None
+
+        def download_model(model_name):
+            print(f"Download model from Huggingface: {model_name}")
+            self.model = self.model_class.from_pretrained(model_name, dtype="auto")
+            self.tokenizer = self.tokenizer_class.from_pretrained(model_name)
+            self.config = self.config_class.from_pretrained(model_name)
+            generation_config = self.generation_config_class.from_pretrained(model_name)
+            self.generation = self.generation_class(generation_config)
+
+        def load_local_model(model_name, cache_dir):
             print(f"Use cached model from {cache_dir}")
-            self.model = Qwen2ForCausalLM.from_pretrained(cache_dir, dtype="auto", local_files_only=True)
-            self.tokenizer = Qwen2TokenizerFast.from_pretrained(cache_dir, local_files_only=True)
-            self.config = Qwen2Config.from_pretrained(cache_dir, local_files_only=True)
-            generation_config = GenerationConfig.from_pretrained(cache_dir, local_files_only=True)
-            self.generation = Qwen2Generation(generation_config)
+            self.model = self.model_class.from_pretrained(cache_dir, dtype="auto", local_files_only=True)
+            self.tokenizer = self.tokenizer_class.from_pretrained(cache_dir, local_files_only=True)
+            self.config = self.config_class.from_pretrained(cache_dir, local_files_only=True)
+            generation_config = self.generation_config_class.from_pretrained(cache_dir, local_files_only=True)
+            self.generation = self.generation_class(generation_config)
+
+        cache_dir = get_mode_cached_dir(model_name)
+        if cache_dir is not None:
+            try:
+                load_local_model(model_name, cache_dir)
+            except Exception as e:
+                print(f"Error loading cached model: {str(e)}")
+                download_model(model_name)
         else:
-            self.model = Qwen2ForCausalLM.from_pretrained(model_name, dtype="auto")
-            self.tokenizer = Qwen2TokenizerFast.from_pretrained(model_name)
-            self.config = Qwen2Config.from_pretrained(model_name)
-            generation_config = GenerationConfig.from_pretrained(model_name)
-            self.generation = Qwen2Generation(generation_config)
+            download_model(model_name)
 
         self.feature_per_head = (int)(self.config.hidden_size / self.config.num_attention_heads)
         self.groups = (int)(self.config.num_attention_heads / self.config.num_key_value_heads)

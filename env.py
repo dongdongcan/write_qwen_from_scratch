@@ -6,11 +6,11 @@ from typing import List, Literal, Sequence, Union
 import shutil
 
 
-def append_line_to_file(file_path: str, line: str) -> None:
-    # Open the file in append mode ('a+')
+def append_lines_to_file(file_path: str, lines: List[str]) -> None:
     with open(file_path, "a+", encoding="utf-8") as file:
-        file.write(line)
-    print(f"Appended `{line}` to `{file_path}`")
+        for line in lines:
+            file.write(line + "\n")
+    print(f"Appending {lines} to {file_path}")
 
 
 def run_shell_cmd(cmd: Sequence[str], cwd: str, capture_output=False, silence=False):
@@ -77,9 +77,8 @@ def create_venv_and_enter(args):
         # add some environment to .venv/bin/activate
         activate_file = os.path.join(env_path, "bin", "activate")
         hugging_face_end_point = "export HF_ENDPOINT=https://hf-mirror.com"
-        append_line_to_file(activate_file, hugging_face_end_point)
         python_path = "export PYTHONPATH=$PYTHONPATH:" + args.root_path
-        append_line_to_file(activate_file, python_path)
+        append_lines_to_file(activate_file, [hugging_face_end_point, python_path])
     else:
         print(f"{env_path} exist!")
 
